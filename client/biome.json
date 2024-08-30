@@ -1,0 +1,32 @@
+{
+	"$schema": "https://biomejs.dev/schemas/1.8.3/schema.json",
+	"organizeImports": {
+		"enabled": true
+	},
+	"linter": {
+		"enabled": true,
+		"include": ["src/**/*.ts", "src/**/*.tsx"],
+		"rules": {
+			"recommended": true
+		}
+	},
+	"overrides": [
+		{
+			"include": ["src/**/*.ts", "src/**/*.tsx"],
+			"linter": {
+				"rules": {
+					"nursery": {
+						"useSortedClasses": {
+							"level": "warn",
+							"fix": "unsafe",
+							"options": {
+								"attributes": ["className"],
+								"functions": ["cn", "clsx"]
+							}
+						}
+					}
+				}
+			}
+		}
+	]
+}
