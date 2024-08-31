@@ -24,6 +24,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^4.3.1
         version: 4.3.1(vite@5.4.2)
+      nanoid:
+        specifier: ^4.0.2
+        version: 4.0.2
       pusher-js:
         specifier: 8.4.0-rc2
         version: 8.4.0-rc2
@@ -115,7 +118,20 @@ importers:
         version: 5.5.4
 
   shared:
+    dependencies:
+      pg-mem:
+        specifier: ^3.0.2
+        version: 3.0.2(pg-promise@11.9.1)
+      pg-promise:
+        specifier: ^11.9.1
+        version: 11.9.1
     devDependencies:
+      '@biomejs/biome':
+        specifier: 1.8.3
+        version: 1.8.3
+      '@types/node':
+        specifier: ^16.18.106
+        version: 16.18.106
       typescript:
         specifier: 4.7.4
         version: 4.7.4

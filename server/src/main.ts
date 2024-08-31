@@ -1,4 +1,5 @@
 import "dotenv/config";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express, {
@@ -6,8 +7,9 @@ import express, {
 	type Request,
 	type Response,
 } from "express";
-
-import fs from "node:fs";
+import { handlePoke } from "./poke";
+import { handlePull } from "./pull";
+import { handlePush } from "./push";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,6 +32,10 @@ const errorHandler = (
 };
 
 app.use(express.urlencoded({ extended: true }), express.json(), errorHandler);
+
+app.post("/api/replicache/pull", handlePull);
+app.post("/api/replicache/push", handlePush);
+app.get("/api/replicache/poke", handlePoke);
 
 if (process.env.NODE_ENV === "production") {
 	app.use(express.static(default_dist));
