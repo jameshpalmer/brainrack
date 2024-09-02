@@ -1,4 +1,4 @@
-import type Express from "express";
+import type { Request, Response } from "express";
 
 export function getPokeBackend() {
 	// The SSE impl has to keep process-wide state using the global object.
@@ -56,10 +56,7 @@ class PokeBackend {
 	}
 }
 
-export async function handlePoke(
-	req: Express.Request,
-	res: Express.Response,
-): Promise<void> {
+export async function handlePoke(req: Request, res: Response): Promise<void> {
 	if (req.query.channel === undefined) {
 		res.status(400).send("Missing channel");
 		return;
