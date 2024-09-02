@@ -4,11 +4,11 @@ import type { MutationV1, PushRequestV1 } from "replicache";
 import type { MessageWithID } from "shared";
 import {
 	type Transaction,
-	db,
 	message,
 	replicacheClient,
 	replicacheServer,
 	serverId,
+	transaction,
 } from "./db";
 import { getPokeBackend } from "./poke";
 
@@ -36,7 +36,7 @@ async function push(req: Request, res: Response) {
 			const t1 = Date.now();
 
 			try {
-				await db.transaction(async (tx) =>
+				await transaction(async (tx) =>
 					processMutation(tx, push.clientGroupID, mutation),
 				);
 			} catch (e) {
@@ -46,7 +46,7 @@ async function push(req: Request, res: Response) {
 				// convenient in development but you may want to reconsider as your app
 				// gets close to production:
 				// https://doc.replicache.dev/reference/server-push#error-handling
-				await db.transaction(async (tx) =>
+				await transaction(async (tx) =>
 					processMutation(tx, push.clientGroupID, mutation, e as string),
 				);
 			}

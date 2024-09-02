@@ -3,11 +3,11 @@ import type { NextFunction, Request, Response } from "express";
 import type { PatchOperation, PullResponse } from "replicache";
 import {
 	type Transaction,
-	db,
 	message,
 	replicacheClient,
 	replicacheServer,
 	serverId,
+	transaction,
 } from "./db";
 
 export async function handlePull(
@@ -32,78 +32,68 @@ async function pull(req: Request, res: Response) {
 
 	try {
 		// Read all data in a single transaction so it's consistent
-		await db.transaction(
-			async (tx) => {
-				const currentVersion = await tx
-					.select({ version: replicacheServer.version })
-					.from(replicacheServer)
-					.where(eq(replicacheServer.id, serverId))
-					.then((r) => r[0]?.version ?? 0);
+		await transaction(async (tx) => {
+			const currentVersion = await tx
+				.select({ version: replicacheServer.version })
+				.from(replicacheServer)
+				.where(eq(replicacheServer.id, serverId))
+				.then((r) => r[0]?.version ?? 0);
 
-				if (fromVersion > currentVersion) {
-					throw new Error(
-						`fromVersion ${fromVersion} is from the future (currentVersion: ${currentVersion}) - aborting.`,
-					);
-				}
-
-				const lastMutationIDChanges = await getLastMutationIDChanges(
-					tx,
-					clientGroupID,
-					fromVersion,
+			if (fromVersion > currentVersion) {
+				throw new Error(
+					`fromVersion ${fromVersion} is from the future (currentVersion: ${currentVersion}) - aborting.`,
 				);
+			}
 
-				const changed = await tx
-					.select({
-						id: message.id,
-						sender: message.sender,
-						content: message.content,
-						ord: message.ord,
-						version: message.version,
-						deleted: message.deleted,
-					})
-					.from(message)
-					.where(gt(message.version, fromVersion));
+			const lastMutationIDChanges = await getLastMutationIDChanges(
+				tx,
+				clientGroupID,
+				fromVersion,
+			);
 
-				const patch: PatchOperation[] = [];
-				for (const row of changed) {
-					const {
-						id,
-						sender,
-						content,
-						ord,
-						version: rowVersion,
-						deleted,
-					} = row;
-					if (deleted) {
-						if (rowVersion !== null && rowVersion > fromVersion) {
-							patch.push({
-								op: "del",
-								key: `message/${id}`,
-							});
-						}
-					} else {
+			const changed = await tx
+				.select({
+					id: message.id,
+					sender: message.sender,
+					content: message.content,
+					ord: message.ord,
+					version: message.version,
+					deleted: message.deleted,
+				})
+				.from(message)
+				.where(gt(message.version, fromVersion));
+
+			const patch: PatchOperation[] = [];
+			for (const row of changed) {
+				const { id, sender, content, ord, version: rowVersion, deleted } = row;
+				if (deleted) {
+					if (rowVersion !== null && rowVersion > fromVersion) {
 						patch.push({
-							op: "put",
+							op: "del",
 							key: `message/${id}`,
-							value: {
-								from: sender,
-								content,
-								order: ord,
-							},
 						});
 					}
+				} else {
+					patch.push({
+						op: "put",
+						key: `message/${id}`,
+						value: {
+							from: sender,
+							content,
+							order: ord,
+						},
+					});
 				}
+			}
 
-				const body: PullResponse = {
-					lastMutationIDChanges: lastMutationIDChanges ?? {},
-					cookie: currentVersion,
-					patch,
-				};
+			const body: PullResponse = {
+				lastMutationIDChanges: lastMutationIDChanges ?? {},
+				cookie: currentVersion,
+				patch,
+			};
 
-				res.json(body);
-			},
-			{ isolationLevel: "repeatable read" },
-		);
+			res.json(body);
+		});
 	} catch (e) {
 		console.error(e);
 		res.status(500).send(e);

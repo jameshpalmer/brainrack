@@ -15,6 +15,12 @@ if (!process.env.DATABASE_URL) {
 
 export const serverId = 1;
 
+export function transaction<T>(
+	callback: (tx: Transaction) => Promise<T>,
+): Promise<T> {
+	return db.transaction(callback, { isolationLevel: "repeatable read" });
+}
+
 const client = postgres(process.env.DATABASE_URL);
 export const db = drizzle(client);
 
