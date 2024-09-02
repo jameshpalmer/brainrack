@@ -1,5 +1,7 @@
-import { newDb } from "pg-mem";
+import dotenv from "dotenv";
 import pgp, { type IDatabase, type ITask } from "pg-promise";
+
+dotenv.config();
 
 const { isolationLevel } = pgp.txMode;
 
@@ -10,21 +12,27 @@ const globalWithDB = global as typeof global & {
 	__db?: Promise<IDatabase<{}>>;
 };
 
+const dbConfig = process.env.DATABASE_URL;
+
+if (!dbConfig) {
+	throw new Error("DATABASE_URL environment variable is required");
+}
+
+const pgpInstance = pgp();
+const db = pgpInstance(dbConfig);
+
 async function initDB() {
 	console.log("initializing database...");
-	const db = newDb().adapters.createPgPromise();
 	await tx(async (t) => {
-		// A single global version number for the entire database.
 		await t.none(
-			"create table replicache_server (id integer primary key not null, version integer)",
+			"create table if not exists replicache_server (id integer primary key not null, version integer)",
 		);
 		await t.none(
-			"insert into replicache_server (id, version) values ($1, 1)",
+			"insert into replicache_server (id, version) values ($1, 1) on conflict (id) do nothing",
 			serverID,
 		);
 
-		// Stores chat messages.
-		await t.none(`create table message (
+		await t.none(`create table if not exists message (
         id text primary key not null,
         sender varchar(255) not null,
         content text not null,
@@ -32,24 +40,20 @@ async function initDB() {
         deleted boolean not null,
         version integer not null)`);
 
-		// Stores last mutationID processed for each Replicache client.
-		await t.none(`create table replicache_client (
+		await t.none(`create table if not exists replicache_client (
         id varchar(36) primary key not null,
         client_group_id varchar(36) not null,
         last_mutation_id integer not null,
         version integer not null)`);
-
-		// TODO: indexes
-	}, db);
+	}, Promise.resolve(db));
 	return db;
 }
 
 function getDB() {
-	// Cache the database in the Node global so that it survives HMR.
 	if (!globalWithDB.__db) {
 		globalWithDB.__db = initDB();
 	}
-	// biome-ignore lint/complexity/noBannedTypes:
+	// biome-ignore lint/complexity/noBannedTypes: <explanation>
 	return globalWithDB.__db as Promise<IDatabase<{}>>;
 }
 
@@ -57,7 +61,6 @@ function getDB() {
 export type Transaction = ITask<{}>;
 type TransactionCallback<R> = (t: Transaction) => Promise<R>;
 
-// In Postgres, snapshot isolation is known as "repeatable read".
 export async function tx<R>(f: TransactionCallback<R>, dbp = getDB()) {
 	const db = await dbp;
 	return await db.tx(

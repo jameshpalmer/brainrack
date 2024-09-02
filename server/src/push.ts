@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { MutationV1, PushRequestV1 } from "replicache";
 import type { MessageWithID } from "shared";
 import { type Transaction, serverID, tx } from "./db";
+import { getPokeBackend } from "./poke";
 
 export async function handlePush(
 	req: Request,
@@ -43,9 +44,10 @@ async function push(req: Request, res: Response) {
 			console.log("Processed mutation in", Date.now() - t1);
 		}
 
-		res.send("{}");
+		const pokeBackend = getPokeBackend();
+		pokeBackend.poke("1");
 
-		await sendPoke();
+		res.send("{}");
 	} catch (e) {
 		console.error(e);
 		res.status(500).send(e);
@@ -181,8 +183,4 @@ async function createMessage(
     ($1, $2, $3, $4, false, $5)`,
 		[id, from, content, order, version],
 	);
-}
-
-async function sendPoke() {
-	// TODO
 }

@@ -1,6 +1,6 @@
 import type Express from "express";
 
-function getPokeBackend() {
+export function getPokeBackend() {
 	// The SSE impl has to keep process-wide state using the global object.
 	// Otherwise the state is lost during hot reload in dev.
 	const global = globalThis as unknown as {
@@ -85,7 +85,7 @@ export async function handlePoke(
 	setInterval(() => {
 		res.write(`id: ${Date.now()}\n`);
 		res.write("data: beat\n\n");
-	}, 1000);
+	}, 1000 * 30);
 
 	res.on("close", () => {
 		console.log("Closing poke connection");
