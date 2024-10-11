@@ -24,7 +24,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 			</div>
 			<hr />
 			<Outlet />
-			<TanStackRouterDevtools />
 		</>
 	),
 });

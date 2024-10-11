@@ -7,7 +7,6 @@ import { nanoid } from "nanoid";
 
 export const Route = createFileRoute("/messages")({
 	component: Messages,
-	loader: ({ context }) => context.replicache,
 });
 
 export function Messages() {
