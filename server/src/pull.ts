@@ -27,28 +27,28 @@ async function pull(req: Request, res: Response) {
 	const pull = req.body;
 	console.log("Processing pull", JSON.stringify(pull));
 	const { clientGroupID } = pull;
-	const fromVersion = pull.cookie ?? 0;
+	const clientVersion = pull.cookie ?? 0;
 	const t0 = Date.now();
 
 	try {
 		// Read all data in a single transaction so it's consistent
 		await transaction(async (tx) => {
-			const currentVersion = await tx
+			const serverVersion = await tx
 				.select({ version: replicacheServer.version })
 				.from(replicacheServer)
 				.where(eq(replicacheServer.id, serverId))
 				.then((r) => r[0]?.version ?? 0);
 
-			if (fromVersion > currentVersion) {
+			if (clientVersion > serverVersion) {
 				throw new Error(
-					`fromVersion ${fromVersion} is from the future (currentVersion: ${currentVersion}) - aborting.`,
+					`clientVersion ${clientVersion} is from the future (serverVersion: ${serverVersion}) - aborting.`,
 				);
 			}
 
 			const lastMutationIDChanges = await getLastMutationIDChanges(
 				tx,
 				clientGroupID,
-				fromVersion,
+				clientVersion,
 			);
 
 			const changed = await tx
@@ -61,13 +61,13 @@ async function pull(req: Request, res: Response) {
 					deleted: message.deleted,
 				})
 				.from(message)
-				.where(gt(message.version, fromVersion));
+				.where(gt(message.version, clientVersion));
 
 			const patch: PatchOperation[] = [];
 			for (const row of changed) {
 				const { id, sender, content, ord, version: rowVersion, deleted } = row;
 				if (deleted) {
-					if (rowVersion !== null && rowVersion > fromVersion) {
+					if (rowVersion !== null && rowVersion > clientVersion) {
 						patch.push({
 							op: "del",
 							key: `message/${id}`,
@@ -88,7 +88,7 @@ async function pull(req: Request, res: Response) {
 
 			const body: PullResponse = {
 				lastMutationIDChanges: lastMutationIDChanges ?? {},
-				cookie: currentVersion,
+				cookie: serverVersion,
 				patch,
 			};
 
@@ -105,7 +105,7 @@ async function pull(req: Request, res: Response) {
 async function getLastMutationIDChanges(
 	tx: Transaction,
 	clientGroupID: string,
-	fromVersion: number,
+	clientVersion: number,
 ) {
 	const rows = (await tx
 		.select({
@@ -116,7 +116,7 @@ async function getLastMutationIDChanges(
 		.where(
 			and(
 				eq(replicacheClient.clientGroupID, clientGroupID),
-				gt(replicacheClient.version, fromVersion),
+				gt(replicacheClient.version, clientVersion),
 				isNotNull(replicacheClient.lastMutationID),
 			),
 		)) as { id: string; lastMutationID: number }[];

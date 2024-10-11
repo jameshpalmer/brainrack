@@ -14,20 +14,24 @@
 		"watch": "concurrently --kill-others 'pnpm run server' 'sleep 3; pnpm run dev'"
 	},
 	"dependencies": {
-		"@vitejs/plugin-react": "^4.3.1",
-		"nanoid": "^4.0.2",
+		"@tanstack/react-router": "^1.64.0",
+		"@vitejs/plugin-react": "^4.3.2",
+		"nanoid": "^5.0.7",
+		"nodemon": "^3.1.7",
 		"pusher-js": "8.4.0-rc2",
 		"react": "^18.3.1",
 		"react-dom": "^18.3.1",
 		"replicache-react": "5.0.1",
 		"shared": "workspace:*",
-		"vite": "^5.4.2"
+		"vite": "^5.4.8"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "1.8.3",
-		"@types/react": "^18.3.5",
-		"@types/react-dom": "^18.3.0",
-		"concurrently": "^7.6.0",
-		"typescript": "^5.5.4"
+		"@biomejs/biome": "1.9.3",
+		"@tanstack/router-devtools": "^1.64.0",
+		"@tanstack/router-plugin": "^1.64.0",
+		"@types/react": "^18.3.11",
+		"@types/react-dom": "^18.3.1",
+		"concurrently": "^9.0.1",
+		"typescript": "^5.6.3"
 	}
 }

@@ -20,3 +20,19 @@ export const message = pgTable("message", {
 	deleted: boolean("deleted"),
 	version: integer("version"),
 });
+
+export const dictionary = pgTable("dictionary", {
+	id: text("id").primaryKey(),
+	name: text("name"),
+	date: text("date"),
+	version: integer("version"),
+	description: text("description"),
+});
+
+export const word = pgTable("word", {
+	id: text("id").primaryKey(),
+	dictionaryId: text("dictionary_id"),
+	word: text("word"),
+	length: integer("length"),
+	playability: integer("playability"),
+});
