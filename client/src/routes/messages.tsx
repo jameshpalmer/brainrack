@@ -1,5 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
-import type { RouterContext } from "./__root";
+import { createFileRoute, useRouteContext } from "@tanstack/react-router";
 import { useEventSourcePoke } from "../hooks/websockets/event-poke-source";
 import { useSubscribe } from "replicache-react";
 import type { Message } from "shared";
@@ -7,13 +6,15 @@ import { useRef } from "react";
 import { nanoid } from "nanoid";
 
 export const Route = createFileRoute("/messages")({
-	component: () => Messages,
+	component: Messages,
 	loader: ({ context }) => context.replicache,
 });
 
-export function Messages({
-	context: { replicache },
-}: { context: RouterContext }) {
+export function Messages() {
+	const { replicache } = useRouteContext({
+		from: "/messages",
+	});
+
 	// Listen for pokes related to the docs this user has access to.
 	useEventSourcePoke("/api/replicache/poke?channel=1", replicache);
 
