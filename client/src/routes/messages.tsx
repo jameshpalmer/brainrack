@@ -63,12 +63,14 @@ export function Messages() {
 				<input ref={usernameRef} required /> says:
 				<input ref={contentRef} required /> <input type="submit" />
 			</form>
-			{messages.map(([k, v]) => (
-				<div key={k}>
-					<b>{v.from}: </b>
-					{v.content}
-				</div>
-			))}
+			<div className="flex w-fit flex-col-reverse">
+				{messages.map(([k, v]) => (
+					<div key={k} className="flex w-fit">
+						<b>{v.from}: </b>
+						{v.content}
+					</div>
+				))}
+			</div>
 		</div>
 	);
 }
