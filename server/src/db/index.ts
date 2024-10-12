@@ -21,7 +21,7 @@ export function transaction<T>(
 	return db.transaction(callback, { isolationLevel: "repeatable read" });
 }
 
-const client = postgres(process.env.DATABASE_URL);
+export const client = postgres(process.env.DATABASE_URL);
 export const db = drizzle(client);
 
 export type Transaction = PgTransaction<

@@ -1,0 +1,31 @@
+export interface Word {
+	word: string;
+	length: number;
+	playability: number;
+	playability_order: number;
+	min_playability_order: number;
+	max_playability_order: number;
+	combinations0: number;
+	probability_order0: number;
+	min_probability_order0: number;
+	max_probability_order0: number;
+	combinations1: number;
+	probability_order1: number;
+	min_probability_order1: number;
+	max_probability_order1: number;
+	combinations2: number;
+	probability_order2: number;
+	min_probability_order2: number;
+	max_probability_order2: number;
+	alphagram: string;
+	num_anagrams: number;
+	num_unique_letters: number;
+	num_vowels: number;
+	point_value: number;
+	front_hooks: string;
+	back_hooks: string;
+	is_front_hook: number;
+	is_back_hook: number;
+	lexicon_symbols: string | null;
+	definition: string | null;
+}

@@ -21,18 +21,20 @@ export const message = pgTable("message", {
 	version: integer("version"),
 });
 
-export const dictionary = pgTable("dictionary", {
+export const alphagram = pgTable("alphagram", {
 	id: text("id").primaryKey(),
-	name: text("name"),
-	date: text("date"),
-	version: integer("version"),
-	description: text("description"),
+	alphagram: text("alphagram").notNull(),
+	length: integer("length").notNull(),
+	cswWords: integer("csw_words").notNull(),
+	nwlWords: integer("nwl_words").notNull(),
 });
 
 export const word = pgTable("word", {
 	id: text("id").primaryKey(),
-	dictionaryId: text("dictionary_id"),
-	word: text("word"),
-	length: integer("length"),
-	playability: integer("playability"),
+	word: text("word").notNull(),
+	definition: text("definition"),
+	cswValid: boolean("csw_valid").notNull(),
+	nwlValid: boolean("nwl_valid").notNull(),
+	playability: integer("playability").notNull(),
+	alphagramId: text("alphagram_id").notNull(),
 });
