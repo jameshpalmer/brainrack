@@ -1,12 +1,12 @@
 import betterSqlite3 from "better-sqlite3";
 import { client, db } from "../src/db";
-import { word, alphagram } from "../src/db/schema";
+import { wordTable, alphagramTable } from "../src/db/schema";
 import type { Word } from "./data/types";
 import { nanoid } from "nanoid";
 
 async function main() {
-	db.delete(word);
-	db.delete(alphagram);
+	db.delete(wordTable);
+	db.delete(alphagramTable);
 
 	const nwl2023 = betterSqlite3("scripts/data/NWL2023.db"); // This one contains definitions
 	const nwl2023Rows = nwl2023
@@ -22,8 +22,8 @@ async function main() {
 		)
 		.all() as Word[];
 
-	const words = new Map<string, typeof word.$inferInsert>();
-	const alphagrams = new Map<string, typeof alphagram.$inferInsert>();
+	const words = new Map<string, typeof wordTable.$inferInsert>();
+	const alphagrams = new Map<string, typeof alphagramTable.$inferInsert>();
 
 	for (const row of nwl2023Rows) {
 		let rowAlphagram = alphagrams.get(row.alphagram);
@@ -49,7 +49,7 @@ async function main() {
 				cswValid: false,
 				nwlValid: true,
 				playability: row.playability,
-				alphagramId: rowAlphagram.id,
+				alphagramID: rowAlphagram.id,
 			});
 		}
 	}
@@ -86,15 +86,18 @@ async function main() {
 				cswValid: true,
 				nwlValid: false,
 				playability: row.playability,
-				alphagramId: rowAlphagram.id,
+				alphagramID: rowAlphagram.id,
 			});
 		}
 	}
 
 	// need to batch insert due to active bug in drizzle-orm: #1740
 	const batchInsert = async (
-		items: (typeof word.$inferInsert | typeof alphagram.$inferInsert)[],
-		table: typeof word | typeof alphagram,
+		items: (
+			| typeof wordTable.$inferInsert
+			| typeof alphagramTable.$inferInsert
+		)[],
+		table: typeof wordTable | typeof alphagramTable,
 	) => {
 		const batchSize = 1000;
 		const batches: Promise<typeof items>[] = [];
@@ -107,8 +110,8 @@ async function main() {
 		await Promise.all(batches);
 	};
 
-	await batchInsert(Array.from(alphagrams.values()), alphagram);
-	await batchInsert(Array.from(words.values()), word);
+	await batchInsert(Array.from(alphagrams.values()), alphagramTable);
+	await batchInsert(Array.from(words.values()), wordTable);
 
 	// close connections
 	csw21.close();

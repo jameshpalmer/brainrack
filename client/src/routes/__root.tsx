@@ -3,7 +3,6 @@ import {
 	Link,
 	Outlet,
 } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/router-devtools";
 import type { Replicache } from "replicache";
 import type { mutators } from "../mutators";
 

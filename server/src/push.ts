@@ -1,16 +1,21 @@
-import { eq } from "drizzle-orm";
 import type { NextFunction, Request, Response } from "express";
-import type { MutationV1, PushRequestV1 } from "replicache";
-import type { MessageWithID } from "shared";
+import type { ReadonlyJSONValue } from "replicache";
+import { z } from "zod";
 import {
-	type Transaction,
-	message,
-	replicacheClient,
-	replicacheServer,
-	serverId,
-	transaction,
-} from "./db";
+	type Affected,
+	getClient,
+	getClientGroup,
+	putClient,
+	putClientGroup,
+} from "./lib/data";
+import { db } from "./db";
+import { type Mutation, mutationSchema, mutate } from "./lib/mutate";
 import { getPokeBackend } from "./poke";
+
+const pushRequestSchema = z.object({
+	clientGroupID: z.string(),
+	mutations: z.array(mutationSchema),
+});
 
 export async function handlePush(
 	req: Request,
@@ -18,182 +23,126 @@ export async function handlePush(
 	next: NextFunction,
 ): Promise<void> {
 	try {
-		await push(req, res);
+		const userId = z.string().parse(req.query.userID);
+		await push(userId, req.body);
+		res.status(200).json({});
 	} catch (e) {
 		next(e);
 	}
 }
 
-async function push(req: Request, res: Response) {
-	const push: PushRequestV1 = req.body;
-	console.log(req.body);
-	console.log("Processing push", JSON.stringify(push));
+export async function push(userId: string, requestBody: ReadonlyJSONValue) {
+	console.log("Processing push", JSON.stringify(requestBody, null, ""));
+
+	const push = pushRequestSchema.parse(requestBody);
 
 	const t0 = Date.now();
-	try {
-		// Iterate each mutation in the push.
-		for (const mutation of push.mutations) {
-			const t1 = Date.now();
 
-			try {
-				await transaction(async (tx) =>
-					processMutation(tx, push.clientGroupID, mutation),
-				);
-			} catch (e) {
-				console.error("Caught error from mutation", mutation, e);
+	const allAffected = {
+		conversationIDs: new Set<string>(),
+		userIDs: new Set<string>(),
+	};
 
-				// Handle errors inside mutations by skipping and moving on. This is
-				// convenient in development but you may want to reconsider as your app
-				// gets close to production:
-				// https://doc.replicache.dev/reference/server-push#error-handling
-				await transaction(async (tx) =>
-					processMutation(tx, push.clientGroupID, mutation, e as string),
-				);
+	for (const mutation of push.mutations) {
+		try {
+			const affected = await processMutation(
+				userId,
+				push.clientGroupID,
+				mutation,
+				false,
+			);
+			for (const listID of affected.conversationIDs) {
+				allAffected.conversationIDs.add(listID);
 			}
-
-			console.log("Processed mutation in", Date.now() - t1);
+			for (const userID of affected.userIDs) {
+				allAffected.userIDs.add(userID);
+			}
+		} catch (e) {
+			await processMutation(userId, push.clientGroupID, mutation, true);
 		}
-
-		const pokeBackend = getPokeBackend();
-		pokeBackend.poke("1");
-
-		res.send("{}");
-	} catch (e) {
-		console.error(e);
-		res.status(500).send(e);
-	} finally {
-		console.log("Processed push in", Date.now() - t0);
 	}
+
+	const pokeBackend = getPokeBackend();
+
+	for (const conversationID of allAffected.conversationIDs) {
+		pokeBackend.poke(`conversation/${conversationID}`);
+	}
+	for (const userID of allAffected.userIDs) {
+		pokeBackend.poke(`user/${userID}`);
+	}
+
+	console.log("Processed all mutations in", Date.now() - t0);
 }
 
 async function processMutation(
-	tx: Transaction,
+	userID: string,
 	clientGroupID: string,
-	mutation: MutationV1,
-	error?: string | undefined,
+	mutation: Mutation,
+	// 1. `let errorMode = false` (implemented via function arg)
+	errorMode: boolean,
 ) {
-	const { clientID } = mutation;
+	return await db.transaction(async (tx) => {
+		let affected: Affected = { conversationIDs: [], userIDs: [] };
 
-	const prevVersion = await tx
-		.select({
-			version: replicacheServer.version,
-		})
-		.from(replicacheServer)
-		.where(eq(replicacheServer.id, serverId))
-		.then((rows) => rows[0]?.version ?? 0);
-
-	const nextVersion = prevVersion + 1;
-
-	const lastMutationID = await getLastMutationId(tx, clientID);
-	const nextMutationID = lastMutationID + 1;
-
-	console.log("nextVersion", nextVersion, "nextMutationID", nextMutationID);
-
-	// It's common due to connectivity issues for clients to send a
-	// mutation which has already been processed. Skip these.
-	if (mutation.id < nextMutationID) {
 		console.log(
-			`Mutation ${mutation.id} has already been processed - skipping`,
+			"Processing mutation",
+			errorMode ? "errorMode" : "",
+			JSON.stringify(mutation, null, ""),
 		);
-		return;
-	}
 
-	// If the Replicache client is working correctly, this can never happen
-	if (mutation.id > nextMutationID) {
-		throw new Error(
-			`Mutation ${mutation.id} is from the future (current: ${nextMutationID}) - aborting.`,
-		);
-	}
+		// 3. `getClientGroup(body.clientGroupID)`
+		// 4. Verify requesting user owns cg (in function)
+		const clientGroup = await getClientGroup(tx, clientGroupID, userID);
 
-	if (error === undefined) {
-		console.log("Processing mutation:", JSON.stringify(mutation));
+		// 5. `getClient(mutation.clientID)`
+		// 6. Verify requesting client group owns requested client
+		const baseClient = await getClient(tx, mutation.clientID, clientGroupID);
 
-		switch (mutation.name) {
-			case "createMessage":
-				await createMessage(tx, mutation.args as MessageWithID, nextVersion);
-				break;
-			default:
-				throw new Error(`Unknown mutation: ${mutation.name}`);
+		// 7. init nextMutationID
+		const nextMutationID = baseClient.lastMutationID + 1;
+
+		// 8. rollback and skip if already processed.
+		if (mutation.id < nextMutationID) {
+			console.log(
+				`Mutation ${mutation.id} has already been processed - skipping`,
+			);
+			return affected;
 		}
-	} else {
-		// TODO: You can store state here in the database to return to clients to
-		// provide additional info about errors
-		console.log(
-			"Handling error from mutation",
-			JSON.stringify(mutation),
-			error,
-		);
-	}
 
-	console.log("setting", clientID, "last_mutation_id to", nextMutationID);
-	await setLastMutationId(
-		tx,
-		clientID,
-		clientGroupID,
-		nextMutationID,
-		nextVersion,
-	);
+		// 9: Rollback and error if from future.
+		if (mutation.id > nextMutationID) {
+			throw new Error(`Mutation ${mutation.id} is from the future - aborting`);
+		}
 
-	await tx
-		.update(replicacheServer)
-		.set({ version: nextVersion })
-		.where(eq(replicacheServer.id, serverId));
-}
+		const t1 = Date.now();
 
-export async function getLastMutationId(tx: Transaction, clientID: string) {
-	const clientRow = await tx
-		.select({
-			lastMutationID: replicacheClient.lastMutationID,
-		})
-		.from(replicacheClient)
-		.where(eq(replicacheClient.id, clientID))
-		.then((rows) => rows[0]);
+		if (!errorMode) {
+			try {
+				// 10(i): Run business logic
+				// 10(i)(a): xmin column is automatically updated by Postgres for any
+				//   affected rows.
+				affected = await mutate(tx, userID, mutation);
+			} catch (e) {
+				// 10(ii)(a-c): log error, abort, and retry
+				console.error(
+					`Error executing mutation: ${JSON.stringify(mutation)}: ${e}`,
+				);
+				throw e;
+			}
+		}
 
-	if (!clientRow) {
-		return 0;
-	}
-
-	return clientRow.lastMutationID ? clientRow.lastMutationID : 0;
-}
-
-async function setLastMutationId(
-	tx: Transaction,
-	clientID: string,
-	clientGroupID: string,
-	lastMutationID: number,
-	version: number,
-) {
-	const result = await tx
-		.update(replicacheClient)
-		.set({
+		// 11-12: put client and client group
+		const nextClient = {
+			id: mutation.clientID,
 			clientGroupID,
-			lastMutationID,
-			version,
-		})
-		.where(eq(replicacheClient.id, clientID))
-		.returning();
+			lastMutationID: nextMutationID,
+		};
 
-	if (result.length === 0) {
-		await tx.insert(replicacheClient).values({
-			id: clientID,
-			clientGroupID,
-			lastMutationID,
-			version,
-		});
-	}
-}
+		await Promise.all([
+			putClientGroup(tx, clientGroup),
+			putClient(tx, nextClient),
+		]);
 
-async function createMessage(
-	tx: Transaction,
-	{ id, from, content, order }: MessageWithID,
-	version: number,
-) {
-	await tx.insert(message).values({
-		id,
-		sender: from,
-		content,
-		ord: order,
-		deleted: false,
-		version,
+		return affected;
 	});
 }

@@ -1,14 +1,36 @@
-import { and, eq, gt, isNotNull } from "drizzle-orm";
 import type { NextFunction, Request, Response } from "express";
-import type { PatchOperation, PullResponse } from "replicache";
+import type { PatchOperation } from "replicache";
+import { transaction } from "./db";
+import { z } from "zod";
 import {
-	type Transaction,
-	message,
-	replicacheClient,
-	replicacheServer,
-	serverId,
-	transaction,
-} from "./db";
+	type CVREntries,
+	cvrEntriesFromSearch,
+	diffCVR,
+	isCVRDiffEmpty,
+	type CVR,
+} from "./lib/cvr";
+import {
+	getClientGroup,
+	getConversations,
+	getMessages,
+	putClientGroup,
+	searchClients,
+	searchConversations,
+	searchMessages,
+} from "./lib/data";
+import { nanoid } from "nanoid";
+
+const cookie = z.object({
+	order: z.number(),
+	cvrID: z.string(),
+});
+
+type Cookie = z.infer<typeof cookie>;
+
+const pullRequest = z.object({
+	clientGroupId: z.string(),
+	cookie: z.union([cookie, z.null()]),
+});
 
 export async function handlePull(
 	req: Request,
@@ -16,110 +38,160 @@ export async function handlePull(
 	next: NextFunction,
 ): Promise<void> {
 	try {
-		const resp = await pull(req, res);
+		const userId = z.string().parse(req.query.userID);
+		const resp = await pull(userId, req.body);
 		res.json(resp);
 	} catch (e) {
 		next(e);
 	}
 }
 
-async function pull(req: Request, res: Response) {
-	const pull = req.body;
-	console.log("Processing pull", JSON.stringify(pull));
-	const { clientGroupID } = pull;
-	const clientVersion = pull.cookie ?? 0;
-	const t0 = Date.now();
+// cvrKey -> ClientViewRecord
+const cvrCache = new Map<string, CVR>();
 
-	try {
-		// Read all data in a single transaction so it's consistent
-		await transaction(async (tx) => {
-			const serverVersion = await tx
-				.select({ version: replicacheServer.version })
-				.from(replicacheServer)
-				.where(eq(replicacheServer.id, serverId))
-				.then((r) => r[0]?.version ?? 0);
+// New pull - row versioning strategy
+// https://doc.replicache.dev/strategies/row-version#pull
+async function pull(userId: string, requestBody: Express.Request) {
+	console.log(`Processing pull ${JSON.stringify(requestBody, null, "")}`);
 
-			if (clientVersion > serverVersion) {
-				throw new Error(
-					`clientVersion ${clientVersion} is from the future (serverVersion: ${serverVersion}) - aborting.`,
-				);
-			}
+	const pull = pullRequest.parse(requestBody);
 
-			const lastMutationIDChanges = await getLastMutationIDChanges(
-				tx,
-				clientGroupID,
-				clientVersion,
-			);
+	const { clientGroupId } = pull;
 
-			const changed = await tx
-				.select({
-					id: message.id,
-					sender: message.sender,
-					content: message.content,
-					ord: message.ord,
-					version: message.version,
-					deleted: message.deleted,
-				})
-				.from(message)
-				.where(gt(message.version, clientVersion));
+	// 1. Fetch prevCVR
+	const prevCVR = pull.cookie ? cvrCache.get(pull.cookie.cvrID) : undefined;
+	// 2. Init baseCVR - if prevCVR exists, use it, otherwise create a new one
+	const baseCVR = prevCVR ?? {};
+	console.log({ prevCVR, baseCVR });
 
-			const patch: PatchOperation[] = [];
-			for (const row of changed) {
-				const { id, sender, content, ord, version: rowVersion, deleted } = row;
-				if (deleted) {
-					if (rowVersion !== null && rowVersion > clientVersion) {
-						patch.push({
-							op: "del",
-							key: `message/${id}`,
-						});
-					}
-				} else {
-					patch.push({
-						op: "put",
-						key: `message/${id}`,
-						value: {
-							from: sender,
-							content,
-							order: ord,
-						},
-					});
-				}
-			}
+	// 3. Begin transaction
+	const txResult = await transaction(async (tx) => {
+		// 4-5. Get client group & check authorization
+		const baseClientGroupRecord = await getClientGroup(
+			tx,
+			clientGroupId,
+			userId,
+		);
 
-			const body: PullResponse = {
-				lastMutationIDChanges: lastMutationIDChanges ?? {},
-				cookie: serverVersion,
-				patch,
-			};
+		// 6. Read all domain data, ids and versions
+		const [conversationMeta, messageMeta, clientMeta] = await Promise.all([
+			// 6. Read all domain data, just ids and versions
+			searchConversations(tx, userId),
+			searchMessages(tx, userId),
+			// 7. Read all clients in CG
+			searchClients(tx, clientGroupId),
+		]);
 
-			res.json(body);
+		console.log({
+			baseClientGroupRecord,
+			conversationMeta,
+			messageMeta,
+			clientMeta,
 		});
-	} catch (e) {
-		console.error(e);
-		res.status(500).send(e);
-	} finally {
-		console.log("Processed pull in", Date.now() - t0);
+
+		// 8. Build nextCVR
+		const nextCVR: CVR = {
+			conversation: cvrEntriesFromSearch(conversationMeta),
+			message: cvrEntriesFromSearch(messageMeta),
+			client: cvrEntriesFromSearch(clientMeta),
+		};
+
+		console.log({ nextCVR });
+
+		// 9. Calculate diffs
+		const diff = diffCVR(baseCVR, nextCVR);
+
+		// 10. If diff is empty, return no-op PR
+		if (prevCVR && isCVRDiffEmpty(diff)) {
+			return null;
+		}
+
+		// 11. Get lists of entities
+		const [conversations, messages] = await Promise.all([
+			getConversations(tx, diff.conversation.puts),
+			getMessages(tx, diff.message.puts),
+		]);
+
+		console.log({ conversations, messages });
+
+		// 12. changed clients - no need to re-read clients from database,
+		// we already have their versions.
+		const clients: CVREntries = {};
+		for (const clientID of diff.client.puts) {
+			clients[clientID] = nextCVR.client[clientID];
+		}
+		console.log({ clients });
+
+		// 13: get newCVRVersion
+		const baseCVRVersion = pull.cookie?.order ?? 0;
+		const nextCVRVersion =
+			Math.max(baseCVRVersion, baseClientGroupRecord.cvrVersion) + 1;
+
+		// 14: Write ClientGroupRecord
+		const nextClientGroupRecord = {
+			...baseClientGroupRecord,
+			cvrVersion: nextCVRVersion,
+		};
+		console.log({ nextClientGroupRecord });
+		await putClientGroup(tx, nextClientGroupRecord);
+
+		return {
+			entities: {
+				conversation: { dels: diff.conversation.dels, puts: conversations },
+				messages: { dels: diff.message.dels, puts: messages },
+			},
+			clients,
+			nextCVR,
+			nextCVRVersion,
+		};
+	});
+
+	// 10: If diff is empty, return no-op PR
+	if (txResult === null) {
+		return {
+			cookie: pull.cookie,
+			lastMutationIDChanges: {},
+			patch: [],
+		};
 	}
-}
 
-async function getLastMutationIDChanges(
-	tx: Transaction,
-	clientGroupID: string,
-	clientVersion: number,
-) {
-	const rows = (await tx
-		.select({
-			id: replicacheClient.id,
-			lastMutationID: replicacheClient.lastMutationID,
-		})
-		.from(replicacheClient)
-		.where(
-			and(
-				eq(replicacheClient.clientGroupID, clientGroupID),
-				gt(replicacheClient.version, clientVersion),
-				isNotNull(replicacheClient.lastMutationID),
-			),
-		)) as { id: string; lastMutationID: number }[];
+	const { entities, clients, nextCVR, nextCVRVersion } = txResult;
 
-	return Object.fromEntries(rows.map((r) => [r.id, r.lastMutationID]));
+	// 16-17. Store cvr
+	const cvrID = nanoid();
+	cvrCache.set(cvrID, nextCVR);
+
+	// 18(i). Build patch
+	const patch: PatchOperation[] = [];
+	if (prevCVR === undefined) {
+		patch.push({ op: "clear" });
+	}
+
+	for (const [name, { puts, dels }] of Object.entries(entities)) {
+		for (const id of dels) {
+			patch.push({ op: "del", key: `${name}/${id}` });
+		}
+		for (const entity of puts) {
+			patch.push({
+				op: "put",
+				key: `${name}/${entity.id}`,
+				value: entity,
+			});
+		}
+	}
+
+	// 18(ii). construct cookie
+	const cookie: Cookie = {
+		order: nextCVRVersion,
+		cvrID,
+	};
+
+	// 18(iii).
+	const lastMutationIDChanges = clients;
+
+	return {
+		cookie,
+		lastMutationIDChanges,
+		patch,
+	};
 }
