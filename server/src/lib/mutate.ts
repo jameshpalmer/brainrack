@@ -1,13 +1,8 @@
 import { z } from "zod";
-import {
-	createConversation,
-	createMessage,
-	deleteMessage,
-	type Affected,
-} from "./data";
+import { createConversation, createMessage, deleteMessage } from "./data";
 import { messageTable, type Transaction } from "../db";
 import { createInsertSchema } from "drizzle-zod";
-import { conversationTable } from "../db/schema";
+import { conversationTable } from "../db";
 
 export const mutationSchema = z.object({
 	id: z.number(),

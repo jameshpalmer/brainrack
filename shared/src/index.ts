@@ -1,9 +1,6 @@
-export * from "./types";
+import * as schema from "./schema";
 
-export type Message = {
-	from: string;
-	content: string;
-	order: number;
-};
+export const { messageTable } = schema;
 
-export type MessageWithID = Message & { id: string };
+export type Conversation = schema.Conversation;
+export type Message = schema.Message;

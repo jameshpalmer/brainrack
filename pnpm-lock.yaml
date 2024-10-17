@@ -164,12 +164,18 @@ importers:
 
   shared:
     dependencies:
+      drizzle-orm:
+        specifier: ^0.33.0
+        version: 0.33.0(@types/better-sqlite3@7.6.11)(@types/pg@8.11.10)(@types/react@18.3.11)(better-sqlite3@11.3.0)(pg@8.13.0)(postgres@3.4.4)(react@18.3.1)(sqlite3@5.1.7)
       pg-mem:
         specifier: ^3.0.2
         version: 3.0.3(pg-promise@11.10.0(pg-query-stream@4.7.0(pg@8.13.0)))(postgres@3.4.4)
       pg-promise:
         specifier: ^11.9.1
         version: 11.10.0(pg-query-stream@4.7.0(pg@8.13.0))
+      zod:
+        specifier: ^3.23.8
+        version: 3.23.8
     devDependencies:
       '@biomejs/biome':
         specifier: 1.8.3

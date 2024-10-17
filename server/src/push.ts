@@ -23,15 +23,15 @@ export async function handlePush(
 	next: NextFunction,
 ): Promise<void> {
 	try {
-		const userId = z.string().parse(req.query.userID);
-		await push(userId, req.body);
+		const userID = "000000000000000000000";
+		await push(userID, req.body);
 		res.status(200).json({});
 	} catch (e) {
 		next(e);
 	}
 }
 
-export async function push(userId: string, requestBody: ReadonlyJSONValue) {
+export async function push(userID: string, requestBody: ReadonlyJSONValue) {
 	console.log("Processing push", JSON.stringify(requestBody, null, ""));
 
 	const push = pushRequestSchema.parse(requestBody);
@@ -46,7 +46,7 @@ export async function push(userId: string, requestBody: ReadonlyJSONValue) {
 	for (const mutation of push.mutations) {
 		try {
 			const affected = await processMutation(
-				userId,
+				userID,
 				push.clientGroupID,
 				mutation,
 				false,
@@ -58,7 +58,7 @@ export async function push(userId: string, requestBody: ReadonlyJSONValue) {
 				allAffected.userIDs.add(userID);
 			}
 		} catch (e) {
-			await processMutation(userId, push.clientGroupID, mutation, true);
+			await processMutation(userID, push.clientGroupID, mutation, true);
 		}
 	}
 
@@ -142,6 +142,8 @@ async function processMutation(
 			putClientGroup(tx, clientGroup),
 			putClient(tx, nextClient),
 		]);
+
+		console.log("Processed mutation in", Date.now() - t1);
 
 		return affected;
 	});

@@ -28,7 +28,7 @@ const cookie = z.object({
 type Cookie = z.infer<typeof cookie>;
 
 const pullRequest = z.object({
-	clientGroupId: z.string(),
+	clientGroupID: z.string(),
 	cookie: z.union([cookie, z.null()]),
 });
 
@@ -38,8 +38,8 @@ export async function handlePull(
 	next: NextFunction,
 ): Promise<void> {
 	try {
-		const userId = z.string().parse(req.query.userID);
-		const resp = await pull(userId, req.body);
+		const userID = "000000000000000000000";
+		const resp = await pull(userID, req.body);
 		res.json(resp);
 	} catch (e) {
 		next(e);
@@ -51,12 +51,12 @@ const cvrCache = new Map<string, CVR>();
 
 // New pull - row versioning strategy
 // https://doc.replicache.dev/strategies/row-version#pull
-async function pull(userId: string, requestBody: Express.Request) {
+async function pull(userID: string, requestBody: Express.Request) {
 	console.log(`Processing pull ${JSON.stringify(requestBody, null, "")}`);
 
 	const pull = pullRequest.parse(requestBody);
 
-	const { clientGroupId } = pull;
+	const { clientGroupID } = pull;
 
 	// 1. Fetch prevCVR
 	const prevCVR = pull.cookie ? cvrCache.get(pull.cookie.cvrID) : undefined;
@@ -69,17 +69,17 @@ async function pull(userId: string, requestBody: Express.Request) {
 		// 4-5. Get client group & check authorization
 		const baseClientGroupRecord = await getClientGroup(
 			tx,
-			clientGroupId,
-			userId,
+			clientGroupID,
+			userID,
 		);
 
 		// 6. Read all domain data, ids and versions
 		const [conversationMeta, messageMeta, clientMeta] = await Promise.all([
 			// 6. Read all domain data, just ids and versions
-			searchConversations(tx, userId),
-			searchMessages(tx, userId),
+			searchConversations(tx, userID),
+			searchMessages(tx, userID),
 			// 7. Read all clients in CG
-			searchClients(tx, clientGroupId),
+			searchClients(tx, clientGroupID),
 		]);
 
 		console.log({
@@ -100,6 +100,8 @@ async function pull(userId: string, requestBody: Express.Request) {
 
 		// 9. Calculate diffs
 		const diff = diffCVR(baseCVR, nextCVR);
+
+		console.log("diff", diff);
 
 		// 10. If diff is empty, return no-op PR
 		if (prevCVR && isCVRDiffEmpty(diff)) {

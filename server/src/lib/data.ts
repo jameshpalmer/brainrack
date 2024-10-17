@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { messageTable, replicacheClientTable, type Transaction } from "../db";
-import { conversationTable, replicacheClientGroupTable } from "../db/schema";
+import { conversationTable, replicacheClientGroupTable } from "../db";
 
 export type SearchResult = {
 	id: string;
@@ -14,32 +14,32 @@ export type Affected = {
 
 export async function getClientGroup(
 	tx: Transaction,
-	clientGroupId: string,
-	userId: string,
+	clientGroupID: string,
+	userID: string,
 ) {
 	const rows = await tx
 		.select({
-			userId: replicacheClientGroupTable.userID,
+			userID: replicacheClientGroupTable.userID,
 			cvrversion: replicacheClientGroupTable.cvrVersion,
 		})
 		.from(replicacheClientGroupTable)
-		.where(eq(replicacheClientGroupTable.id, clientGroupId));
+		.where(eq(replicacheClientGroupTable.id, clientGroupID));
 
 	if (!rows || rows.length === 0) {
 		return {
-			id: clientGroupId,
-			userId,
+			id: clientGroupID,
+			userID,
 			cvrVersion: 0,
 		};
 	}
 
 	const r = rows[0];
-	if (r.userId !== userId) {
+	if (r.userID !== userID) {
 		throw new Error("Authorization error - user does not own client group");
 	}
 	return {
-		id: clientGroupId,
-		userId: r.userId,
+		id: clientGroupID,
+		userID: r.userID,
 		cvrVersion: r.cvrversion,
 	};
 }
@@ -80,7 +80,7 @@ export async function getClient(
 
 export async function searchConversations(
 	tx: Transaction,
-	accessibleByUserId: string,
+	accessibleByUserID: string,
 ) {
 	const rows = await tx
 		.select({
@@ -88,14 +88,14 @@ export async function searchConversations(
 			rowVersion: sql<number>`conversation.xmin as "rowVersion"`,
 		})
 		.from(conversationTable)
-		.where(eq(conversationTable.ownerUserID, accessibleByUserId));
+		.where(eq(conversationTable.ownerUserID, accessibleByUserID));
 
 	return rows;
 }
 
 export async function searchMessages(
 	tx: Transaction,
-	accessibleByUserId: string,
+	accessibleByUserID: string,
 ) {
 	const conversations = tx
 		.select({
@@ -103,7 +103,7 @@ export async function searchMessages(
 			xmin: sql<number>`conversation.xmin as "rowVersion"`,
 		})
 		.from(conversationTable)
-		.where(eq(conversationTable.ownerUserID, accessibleByUserId))
+		.where(eq(conversationTable.ownerUserID, accessibleByUserID))
 		.as("conversations");
 
 	const rows = await tx
@@ -120,14 +120,14 @@ export async function searchMessages(
 	return rows as SearchResult[];
 }
 
-export async function searchClients(tx: Transaction, clientGroupId: string) {
+export async function searchClients(tx: Transaction, clientGroupID: string) {
 	const rows = await tx
 		.select({
 			id: replicacheClientTable.id,
 			rowVersion: replicacheClientTable.lastMutationID,
 		})
 		.from(replicacheClientTable)
-		.where(eq(replicacheClientTable.clientGroupID, clientGroupId));
+		.where(eq(replicacheClientTable.clientGroupID, clientGroupID));
 
 	return rows as SearchResult[];
 }
@@ -149,7 +149,7 @@ export async function getConversations(
 
 export async function getMessages(
 	tx: Transaction,
-	messageIds: string[],
+	messageIDs: string[],
 ): Promise<Omit<typeof messageTable.$inferSelect, "lastModified">[]> {
 	const messages = await tx
 		.select({
@@ -161,7 +161,7 @@ export async function getMessages(
 			deleted: messageTable.deleted,
 		})
 		.from(messageTable)
-		.where(inArray(messageTable.id, messageIds));
+		.where(inArray(messageTable.id, messageIDs));
 
 	return messages;
 }
@@ -256,7 +256,7 @@ export async function deleteMessage(
 
 	const message = await tx
 		.select({
-			conversationId: messageTable.conversationID,
+			conversationID: messageTable.conversationID,
 		})
 		.from(messageTable)
 		.innerJoin(
@@ -271,5 +271,5 @@ export async function deleteMessage(
 
 	await tx.delete(messageTable).where(eq(messageTable.id, messageID));
 
-	return { conversationIDs: [message[0].conversationId], userIDs: [] };
+	return { conversationIDs: [message[0].conversationID], userIDs: [] };
 }

@@ -1,15 +1,17 @@
 import type { WriteTransaction } from "replicache";
-import type { MessageWithID } from "shared";
+import type { Conversation, Message } from "shared";
 
 export const mutators = {
-	async createMessage(
+	async createConversation(
 		tx: WriteTransaction,
-		{ id, from, content, order }: MessageWithID,
+		{ id, ...conversation }: Conversation,
 	) {
-		await tx.set(`message/${id}`, {
-			from,
-			content,
-			order,
-		});
+		tx.set(`conversation/${id}`, conversation);
+	},
+	async createMessage(tx: WriteTransaction, { id, ...message }: Message) {
+		await tx.set(`message/${id}`, message);
+	},
+	async deleteMessage(tx: WriteTransaction, id: string) {
+		tx.del(`message/${id}`);
 	},
 };

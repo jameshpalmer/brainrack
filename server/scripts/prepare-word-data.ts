@@ -1,6 +1,5 @@
 import betterSqlite3 from "better-sqlite3";
-import { client, db } from "../src/db";
-import { wordTable, alphagramTable } from "../src/db/schema";
+import { client, db, wordTable, alphagramTable } from "../src/db";
 import type { Word } from "./data/types";
 import { nanoid } from "nanoid";
 

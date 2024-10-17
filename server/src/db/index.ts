@@ -5,16 +5,23 @@ import {
 	drizzle,
 } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import * as schema from "./schema";
+import * as schema from "shared/src/schema";
 
-export const { replicacheServerTable, replicacheClientTable, messageTable } =
-	schema;
+export const {
+	replicacheServerTable,
+	replicacheClientTable,
+	conversationTable,
+	messageTable,
+	alphagramTable,
+	gameTable,
+	replicacheClientGroupTable,
+	userTable,
+	wordTable,
+} = schema;
 
 if (!process.env.DATABASE_URL) {
 	throw new Error("DATABASE_URL environment variable is required");
 }
-
-export const serverId = 1;
 
 export function transaction<T>(
 	callback: (tx: Transaction) => Promise<T>,

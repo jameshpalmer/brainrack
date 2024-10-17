@@ -17,6 +17,9 @@ export const userTable = pgTable("user", {
 	lastModified: timestamp("last_modified").defaultNow(),
 });
 
+// Omit lastModified because timestamps are not serializable (w/o string conversion)
+export type User = Omit<typeof userTable.$inferSelect, "lastModified">;
+
 export const replicacheClientGroupTable = pgTable("replicache_client_group", {
 	id: text("id").primaryKey(),
 	userID: text("user_id").references(() => userTable.id),
@@ -38,6 +41,11 @@ export const conversationTable = pgTable("conversation", {
 	lastModified: timestamp("last_modified").defaultNow(),
 });
 
+export type Conversation = Omit<
+	typeof conversationTable.$inferSelect,
+	"lastModified"
+>;
+
 export const messageTable = pgTable("message", {
 	id: text("id").primaryKey(),
 	sender: text("sender"),
@@ -48,8 +56,9 @@ export const messageTable = pgTable("message", {
 		.notNull()
 		.references(() => conversationTable.id),
 	lastModified: timestamp("last_modified").defaultNow(),
-	// xmin: integer("xmin"), // Postgres system column representing transaction ID
 });
+
+export type Message = Omit<typeof messageTable.$inferSelect, "lastModified">;
 
 export const alphagramTable = pgTable("alphagram", {
 	id: text("id").primaryKey(),
