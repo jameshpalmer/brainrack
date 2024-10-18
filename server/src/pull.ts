@@ -38,7 +38,7 @@ export async function handlePull(
 	next: NextFunction,
 ): Promise<void> {
 	try {
-		const userID = "000000000000000000000";
+		const userID = z.string().parse(req.query.userID);
 		const resp = await pull(userID, req.body);
 		res.json(resp);
 	} catch (e) {
@@ -140,7 +140,7 @@ async function pull(userID: string, requestBody: Express.Request) {
 		return {
 			entities: {
 				conversation: { dels: diff.conversation.dels, puts: conversations },
-				messages: { dels: diff.message.dels, puts: messages },
+				message: { dels: diff.message.dels, puts: messages },
 			},
 			clients,
 			nextCVR,

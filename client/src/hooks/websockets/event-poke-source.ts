@@ -3,14 +3,14 @@ import type { Replicache } from "replicache";
 import type { mutators } from "../../mutators";
 
 export function useEventSourcePoke(
-	url: string,
 	rep: Replicache<typeof mutators>,
+	channel: string,
 ) {
 	useEffect(() => {
-		const ev = new EventSource(url);
+		const ev = new EventSource(`/api/replicache/poke?channel=${channel}`);
 		ev.onmessage = () => {
 			void rep.pull();
 		};
 		return () => ev.close();
-	}, [url, rep]);
+	}, [rep, channel]);
 }

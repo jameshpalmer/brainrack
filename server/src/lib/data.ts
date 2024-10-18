@@ -158,7 +158,6 @@ export async function getMessages(
 			sender: messageTable.sender,
 			content: messageTable.content,
 			ord: messageTable.ord,
-			deleted: messageTable.deleted,
 		})
 		.from(messageTable)
 		.where(inArray(messageTable.id, messageIDs));
@@ -189,12 +188,21 @@ export async function putClient(
 ) {
 	const { id, clientGroupID, lastMutationID } = client;
 
-	await tx.insert(replicacheClientTable).values({
-		id,
-		clientGroupID,
-		lastMutationID,
-		lastModified: sql`NOW()`,
-	});
+	await tx
+		.insert(replicacheClientTable)
+		.values({
+			id,
+			clientGroupID,
+			lastMutationID,
+			lastModified: sql`NOW()`,
+		})
+		.onConflictDoUpdate({
+			target: replicacheClientTable.id,
+			set: {
+				lastMutationID,
+				lastModified: sql`NOW()`,
+			},
+		});
 }
 
 export async function createConversation(

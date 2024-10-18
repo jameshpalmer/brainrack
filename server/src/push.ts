@@ -23,7 +23,7 @@ export async function handlePush(
 	next: NextFunction,
 ): Promise<void> {
 	try {
-		const userID = "000000000000000000000";
+		const userID = z.string().parse(req.query.userID);
 		await push(userID, req.body);
 		res.status(200).json({});
 	} catch (e) {

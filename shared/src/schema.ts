@@ -51,7 +51,6 @@ export const messageTable = pgTable("message", {
 	sender: text("sender"),
 	content: text("content"),
 	ord: integer("ord"),
-	deleted: boolean("deleted"),
 	conversationID: text("conversation_id")
 		.notNull()
 		.references(() => conversationTable.id),

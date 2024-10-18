@@ -7,6 +7,7 @@ import "./index.css";
 
 // Import the generated route tree
 import { routeTree } from "./routeTree.gen";
+import { useAuth } from "./lib/hooks/auth";
 
 const licenseKey =
 	import.meta.env.VITE_REPLICACHE_LICENSE_KEY || TEST_LICENSE_KEY;
@@ -14,19 +15,23 @@ if (!licenseKey) {
 	throw new Error("Missing VITE_REPLICACHE_LICENSE_KEY");
 }
 
+const user = useAuth();
+
 const replicache = new Replicache({
 	name: "chat-user-id",
 	licenseKey,
 	mutators,
-	pushURL: "/api/replicache/push",
-	pullURL: "/api/replicache/pull",
+	pushURL: `/api/replicache/push?userID=${user.id}`,
+	pullURL: `/api/replicache/pull?userID=${user.id}`,
 	logLevel: "debug",
 });
 
+// Create a new router instance
 const router = createRouter({
 	routeTree,
 	context: {
 		replicache,
+		user,
 	},
 });
 
@@ -38,8 +43,6 @@ declare module "@tanstack/react-router" {
 }
 
 async function init() {
-	// Create a new router instance
-
 	// Render the app
 	const rootElement = document.getElementById("root");
 
