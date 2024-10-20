@@ -35,6 +35,11 @@ export const replicacheClientTable = pgTable("replicache_client", {
 	lastModified: timestamp("last_modified").defaultNow(),
 });
 
+export type ReplicacheClient = Omit<
+	typeof replicacheClientTable.$inferSelect,
+	"lastModified"
+>;
+
 export const conversationTable = pgTable("conversation", {
 	id: text("id").primaryKey(),
 	ownerUserID: text("owner_user_id").references(() => userTable.id),
@@ -59,14 +64,35 @@ export const messageTable = pgTable("message", {
 
 export type Message = Omit<typeof messageTable.$inferSelect, "lastModified">;
 
+// word group associates the KV in replicache
+export const wordGroupTable = pgTable("word_group", {
+	id: text("id").primaryKey(),
+	length: integer("length").notNull(),
+	lastModified: timestamp("last_modified").defaultNow(),
+});
+
+export type WordGroup = Omit<
+	typeof wordGroupTable.$inferSelect,
+	"lastModified"
+>;
+
 export const alphagramTable = pgTable("alphagram", {
 	id: text("id").primaryKey(),
 	alphagram: text("alphagram").notNull(),
-	length: integer("length").notNull(),
+	wordGroupID: text("word_group_id")
+		.notNull()
+		.references(() => wordGroupTable.id),
 	cswWords: integer("csw_words").notNull(),
 	nwlWords: integer("nwl_words").notNull(),
 	lastModified: timestamp("last_modified").defaultNow(),
 });
+
+export type Alphagram = Omit<
+	typeof alphagramTable.$inferSelect,
+	"lastModified" | "wordGroupID"
+> & {
+	wordIDs: string[];
+};
 
 export const wordTable = pgTable("word", {
 	id: text("id").primaryKey(),
@@ -80,6 +106,8 @@ export const wordTable = pgTable("word", {
 		.references(() => alphagramTable.id),
 	lastModified: timestamp("last_modified").defaultNow(),
 });
+
+export type Word = Omit<typeof wordTable.$inferSelect, "lastModified">;
 
 export const gameTable = pgTable("game", {
 	id: text("id").primaryKey(),

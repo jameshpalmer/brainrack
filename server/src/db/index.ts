@@ -17,6 +17,7 @@ export const {
 	replicacheClientGroupTable,
 	userTable,
 	wordTable,
+	wordGroupTable,
 } = schema;
 
 if (!process.env.DATABASE_URL) {

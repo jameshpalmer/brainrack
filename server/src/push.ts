@@ -8,7 +8,7 @@ import {
 	putClient,
 	putClientGroup,
 } from "./lib/data";
-import { db } from "./db";
+import { transaction } from "./db";
 import { type Mutation, mutationSchema, mutate } from "./lib/mutate";
 import { getPokeBackend } from "./poke";
 
@@ -81,7 +81,7 @@ async function processMutation(
 	// 1. `let errorMode = false` (implemented via function arg)
 	errorMode: boolean,
 ) {
-	return await db.transaction(async (tx) => {
+	return await transaction(async (tx) => {
 		let affected: Affected = { conversationIDs: [], userIDs: [] };
 
 		console.log(

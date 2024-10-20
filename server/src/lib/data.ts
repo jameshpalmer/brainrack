@@ -1,6 +1,22 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
-import { messageTable, replicacheClientTable, type Transaction } from "../db";
-import { conversationTable, replicacheClientGroupTable } from "../db";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import {
+	alphagramTable,
+	messageTable,
+	replicacheClientTable,
+	replicacheClientGroupTable,
+	conversationTable,
+	wordGroupTable,
+	wordTable,
+	type Transaction,
+} from "../db";
+import type {
+	Alphagram,
+	Conversation,
+	Message,
+	ReplicacheClient,
+	Word,
+	WordGroup,
+} from "shared";
 
 export type SearchResult = {
 	id: string;
@@ -48,7 +64,7 @@ export async function getClient(
 	tx: Transaction,
 	clientID: string,
 	clientGroupID: string,
-): Promise<Omit<typeof replicacheClientTable.$inferSelect, "lastModified">> {
+): Promise<ReplicacheClient> {
 	const rows = await tx
 		.select({
 			id: replicacheClientTable.id,
@@ -78,6 +94,32 @@ export async function getClient(
 	};
 }
 
+export async function seachWordGroups(tx: Transaction) {
+	const wordGroups = tx
+		.select({
+			id: wordGroupTable.id,
+			length: wordGroupTable.length,
+			rowVersion: sql<number>`word_group.xmin`.as("rowVersion"),
+			rowNumber:
+				sql<number>`row_number() over(partition by word_group.length order by word_group.last_modified desc)`.as(
+					"rowNumber",
+				),
+		})
+		.from(wordGroupTable)
+		.orderBy(desc(wordGroupTable.lastModified))
+		.as("wordGroups");
+
+	const rows = await tx
+		.select({
+			id: wordGroups.id,
+			rowVersion: wordGroups.rowVersion,
+		})
+		.from(wordGroups)
+		.where(eq(wordGroups.rowNumber, 1));
+
+	return rows as SearchResult[];
+}
+
 export async function searchConversations(
 	tx: Transaction,
 	accessibleByUserID: string,
@@ -90,7 +132,7 @@ export async function searchConversations(
 		.from(conversationTable)
 		.where(eq(conversationTable.ownerUserID, accessibleByUserID));
 
-	return rows;
+	return rows as SearchResult[];
 }
 
 export async function searchMessages(
@@ -98,10 +140,7 @@ export async function searchMessages(
 	accessibleByUserID: string,
 ) {
 	const conversations = tx
-		.select({
-			id: conversationTable.id,
-			xmin: sql<number>`conversation.xmin as "rowVersion"`,
-		})
+		.select({ id: conversationTable.id })
 		.from(conversationTable)
 		.where(eq(conversationTable.ownerUserID, accessibleByUserID))
 		.as("conversations");
@@ -135,7 +174,7 @@ export async function searchClients(tx: Transaction, clientGroupID: string) {
 export async function getConversations(
 	tx: Transaction,
 	conversationIDs: string[],
-): Promise<Omit<typeof conversationTable.$inferSelect, "lastModified">[]> {
+): Promise<Conversation[]> {
 	const conversations = await tx
 		.select({
 			id: conversationTable.id,
@@ -150,7 +189,7 @@ export async function getConversations(
 export async function getMessages(
 	tx: Transaction,
 	messageIDs: string[],
-): Promise<Omit<typeof messageTable.$inferSelect, "lastModified">[]> {
+): Promise<Message[]> {
 	const messages = await tx
 		.select({
 			id: messageTable.id,
@@ -163,6 +202,65 @@ export async function getMessages(
 		.where(inArray(messageTable.id, messageIDs));
 
 	return messages;
+}
+
+export async function getDictionary(
+	tx: Transaction,
+	wordGroupIDs: string[],
+): Promise<{ wordGroup: WordGroup; alphagrams: Alphagram[]; words: Word[] }[]> {
+	const queries: Promise<[WordGroup[], Alphagram[], Word[]]>[] = [];
+	for (const wordGroupID of wordGroupIDs) {
+		console.log("wordGroupID", wordGroupID);
+		const wordGroups = tx
+			.select({
+				id: wordGroupTable.id,
+				length: wordGroupTable.length,
+			})
+			.from(wordGroupTable)
+			.where(eq(wordGroupTable.id, wordGroupID));
+
+		const alphagrams = tx
+			.select({
+				id: alphagramTable.id,
+				alphagram: alphagramTable.alphagram,
+				cswWords: alphagramTable.cswWords,
+				nwlWords: alphagramTable.nwlWords,
+				// all words with word.alphagramID = alphagram.id
+				wordIDs: sql<string[]>`array_agg(word.id) as "wordIDs"`,
+			})
+			.from(alphagramTable)
+			.innerJoin(wordTable, eq(alphagramTable.id, wordTable.alphagramID))
+			.where(eq(alphagramTable.wordGroupID, wordGroupID))
+			.groupBy(alphagramTable.id);
+
+		const alphagramSubquery = alphagrams.as("alphagrams");
+
+		const words = tx
+			.select({
+				id: wordTable.id,
+				word: wordTable.word,
+				definition: wordTable.definition,
+				cswValid: wordTable.cswValid,
+				nwlValid: wordTable.nwlValid,
+				playability: wordTable.playability,
+				alphagramID: wordTable.alphagramID,
+			})
+			.from(wordTable)
+			.innerJoin(
+				alphagramSubquery,
+				eq(wordTable.alphagramID, alphagramSubquery.id),
+			);
+
+		queries.push(Promise.all([wordGroups, alphagrams, words]));
+	}
+
+	const results = await Promise.all(queries);
+
+	return results.map(([wordGroup, alphagrams, words]) => ({
+		wordGroup: wordGroup[0],
+		alphagrams,
+		words,
+	}));
 }
 
 export async function putClientGroup(

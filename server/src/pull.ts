@@ -12,8 +12,10 @@ import {
 import {
 	getClientGroup,
 	getConversations,
+	getDictionary,
 	getMessages,
 	putClientGroup,
+	seachWordGroups,
 	searchClients,
 	searchConversations,
 	searchMessages,
@@ -74,16 +76,19 @@ async function pull(userID: string, requestBody: Express.Request) {
 		);
 
 		// 6. Read all domain data, ids and versions
-		const [conversationMeta, messageMeta, clientMeta] = await Promise.all([
-			// 6. Read all domain data, just ids and versions
-			searchConversations(tx, userID),
-			searchMessages(tx, userID),
-			// 7. Read all clients in CG
-			searchClients(tx, clientGroupID),
-		]);
+		const [wordGroupMeta, conversationMeta, messageMeta, clientMeta] =
+			await Promise.all([
+				// 6. Read all domain data, just ids and versions
+				seachWordGroups(tx),
+				searchConversations(tx, userID),
+				searchMessages(tx, userID),
+				// 7. Read all clients in CG
+				searchClients(tx, clientGroupID),
+			]);
 
 		console.log({
 			baseClientGroupRecord,
+			wordListMeta: wordGroupMeta,
 			conversationMeta,
 			messageMeta,
 			clientMeta,
@@ -91,6 +96,7 @@ async function pull(userID: string, requestBody: Express.Request) {
 
 		// 8. Build nextCVR
 		const nextCVR: CVR = {
+			wordGroup: cvrEntriesFromSearch(wordGroupMeta),
 			conversation: cvrEntriesFromSearch(conversationMeta),
 			message: cvrEntriesFromSearch(messageMeta),
 			client: cvrEntriesFromSearch(clientMeta),
@@ -109,12 +115,13 @@ async function pull(userID: string, requestBody: Express.Request) {
 		}
 
 		// 11. Get lists of entities
-		const [conversations, messages] = await Promise.all([
+		const [conversations, messages, dictionary] = await Promise.all([
 			getConversations(tx, diff.conversation.puts),
 			getMessages(tx, diff.message.puts),
+			getDictionary(tx, diff.wordGroup.puts),
 		]);
 
-		console.log({ conversations, messages });
+		console.log({ conversations, messages, dictionary });
 
 		// 12. changed clients - no need to re-read clients from database,
 		// we already have their versions.
@@ -142,6 +149,7 @@ async function pull(userID: string, requestBody: Express.Request) {
 				conversation: { dels: diff.conversation.dels, puts: conversations },
 				message: { dels: diff.message.dels, puts: messages },
 			},
+			dictionary,
 			clients,
 			nextCVR,
 			nextCVRVersion,
@@ -157,7 +165,7 @@ async function pull(userID: string, requestBody: Express.Request) {
 		};
 	}
 
-	const { entities, clients, nextCVR, nextCVRVersion } = txResult;
+	const { entities, dictionary, clients, nextCVR, nextCVRVersion } = txResult;
 
 	// 16-17. Store cvr
 	const cvrID = nanoid();
@@ -180,6 +188,19 @@ async function pull(userID: string, requestBody: Express.Request) {
 				value: entity,
 			});
 		}
+	}
+
+	for (const { wordGroup, words, alphagrams } of dictionary) {
+		patch.push({
+			op: "put",
+			key: `words/${wordGroup.id}`,
+			value: words,
+		});
+		patch.push({
+			op: "put",
+			key: `alphagrams/${wordGroup.id}`,
+			value: alphagrams,
+		});
 	}
 
 	// 18(ii). construct cookie

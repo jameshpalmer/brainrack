@@ -43,6 +43,13 @@
       "when": 1729198382649,
       "tag": "0005_fair_speedball",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1729440533713,
+      "tag": "0006_glossy_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

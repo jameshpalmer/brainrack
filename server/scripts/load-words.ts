@@ -1,23 +1,41 @@
 import betterSqlite3 from "better-sqlite3";
-import { client, db, wordTable, alphagramTable } from "../src/db";
+import {
+	client,
+	db,
+	wordTable,
+	alphagramTable,
+	wordGroupTable,
+} from "../src/db";
 import type { Word } from "./data/types";
 import { nanoid } from "nanoid";
 
 async function main() {
-	db.delete(wordTable);
-	db.delete(alphagramTable);
+	const wordLength = 7;
+
+	const [_w, _a, [wordGroup]] = await Promise.all([
+		db.delete(wordTable),
+		db.delete(alphagramTable),
+		db
+			.insert(wordGroupTable)
+			.values({ id: nanoid(), length: wordLength })
+			.returning(),
+	]);
+
+	if (!wordGroup) {
+		throw new Error("Error creating word group");
+	}
 
 	const nwl2023 = betterSqlite3("scripts/data/NWL2023.db"); // This one contains definitions
 	const nwl2023Rows = nwl2023
 		.prepare(
-			"SELECT word, definition, playability, alphagram, length FROM words WHERE length = 7",
+			`SELECT word, definition, playability, alphagram, length FROM words WHERE length = ${wordLength}`,
 		)
 		.all() as Word[];
 
 	const csw21 = betterSqlite3("scripts/data/CSW21.db");
 	const csw21Rows = csw21
 		.prepare(
-			"SELECT word, definition, playability, alphagram, length FROM words WHERE length = 7",
+			`SELECT word, definition, playability, alphagram, length FROM words WHERE length = ${wordLength}`,
 		)
 		.all() as Word[];
 
@@ -30,7 +48,7 @@ async function main() {
 			rowAlphagram = {
 				id: nanoid(),
 				alphagram: row.alphagram,
-				length: row.length,
+				wordGroupID: wordGroup.id,
 				nwlWords: 1,
 				cswWords: 0,
 			};
@@ -59,7 +77,7 @@ async function main() {
 			rowAlphagram = {
 				id: nanoid(),
 				alphagram: row.alphagram,
-				length: row.length,
+				wordGroupID: wordGroup.id,
 				nwlWords: 0,
 				cswWords: 1,
 			};

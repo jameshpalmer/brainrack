@@ -40,7 +40,7 @@
 		"prepack": "pnpm run build",
 		"generate": "drizzle-kit generate",
 		"migrate": "drizzle-kit migrate",
-		"prepare-data": "tsx --env-file=.env ./scripts/prepare-word-data.ts"
+		"load-words": "tsx --env-file=.env ./scripts/load-words.ts"
 	},
 	"type": "module",
 	"engines": {

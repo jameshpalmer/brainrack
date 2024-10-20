@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useEventSourcePoke } from "../../hooks/websockets/event-poke-source";
 import { useSubscribe } from "replicache-react";
-import type { Conversation } from "shared";
+import type { Conversation, Word } from "shared";
 
 export const Route = createFileRoute("/(conversation)/_c")({
 	component: ConversationLayout,
@@ -24,6 +24,20 @@ function ConversationLayout() {
 		},
 		{ default: [] },
 	);
+
+	const words = useSubscribe(
+		replicache,
+		async (tx) => {
+			const list = await tx
+				.scan<Word>({ prefix: "words/" })
+				.entries()
+				.toArray();
+			return list;
+		},
+		{ default: [] },
+	);
+
+	console.log(words);
 
 	return (
 		<div className="p-2">
