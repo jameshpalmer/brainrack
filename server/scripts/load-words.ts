@@ -58,17 +58,17 @@ async function main() {
 				...rowAlphagram,
 				nwlWords: rowAlphagram.nwlWords + 1,
 			});
-
-			words.set(row.word, {
-				id: nanoid(),
-				word: row.word,
-				definition: row.definition,
-				cswValid: false,
-				nwlValid: true,
-				playability: row.playability,
-				alphagramID: rowAlphagram.id,
-			});
 		}
+
+		words.set(row.word, {
+			id: nanoid(),
+			word: row.word,
+			definition: row.definition,
+			cswValid: false,
+			nwlValid: true,
+			playability: row.playability,
+			alphagramID: rowAlphagram.id,
+		});
 	}
 
 	for (const row of csw21Rows) {

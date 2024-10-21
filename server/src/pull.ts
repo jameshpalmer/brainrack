@@ -88,7 +88,7 @@ async function pull(userID: string, requestBody: Express.Request) {
 
 		console.log({
 			baseClientGroupRecord,
-			wordListMeta: wordGroupMeta,
+			wordGroupMeta,
 			conversationMeta,
 			messageMeta,
 			clientMeta,
@@ -148,6 +148,7 @@ async function pull(userID: string, requestBody: Express.Request) {
 			entities: {
 				conversation: { dels: diff.conversation.dels, puts: conversations },
 				message: { dels: diff.message.dels, puts: messages },
+				wordGroup: { dels: diff.wordGroup.dels, puts: [] }, // puts are in dictionary
 			},
 			dictionary,
 			clients,
@@ -193,6 +194,11 @@ async function pull(userID: string, requestBody: Express.Request) {
 	for (const { wordGroup, words, alphagrams } of dictionary) {
 		patch.push({
 			op: "put",
+			key: `wordGroup/${wordGroup.id}`,
+			value: wordGroup,
+		});
+		patch.push({
+			op: "put",
 			key: `words/${wordGroup.id}`,
 			value: words,
 		});
@@ -201,6 +207,12 @@ async function pull(userID: string, requestBody: Express.Request) {
 			key: `alphagrams/${wordGroup.id}`,
 			value: alphagrams,
 		});
+	}
+
+	for (const wordGroupID of entities.wordGroup.dels) {
+		patch.push({ op: "del", key: `wordGroup/${wordGroupID}` });
+		patch.push({ op: "del", key: `words/${wordGroupID}` });
+		patch.push({ op: "del", key: `alphagrams/${wordGroupID}` });
 	}
 
 	// 18(ii). construct cookie

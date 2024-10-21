@@ -219,37 +219,31 @@ export async function getDictionary(
 			.from(wordGroupTable)
 			.where(eq(wordGroupTable.id, wordGroupID));
 
-		const alphagrams = tx
+		const alphagrams: Promise<Alphagram[]> = tx
 			.select({
-				id: alphagramTable.id,
-				alphagram: alphagramTable.alphagram,
-				cswWords: alphagramTable.cswWords,
-				nwlWords: alphagramTable.nwlWords,
-				// all words with word.alphagramID = alphagram.id
-				wordIDs: sql<string[]>`array_agg(word.id) as "wordIDs"`,
+				a: alphagramTable.alphagram,
+				ws: sql<string[]>`array_agg(word.word) as "ws"`,
+				cs: alphagramTable.cswWords,
+				ns: alphagramTable.nwlWords,
 			})
 			.from(alphagramTable)
 			.innerJoin(wordTable, eq(alphagramTable.id, wordTable.alphagramID))
 			.where(eq(alphagramTable.wordGroupID, wordGroupID))
 			.groupBy(alphagramTable.id);
 
-		const alphagramSubquery = alphagrams.as("alphagrams");
-
-		const words = tx
+		const words: Promise<Word[]> = tx
 			.select({
-				id: wordTable.id,
-				word: wordTable.word,
-				definition: wordTable.definition,
-				cswValid: wordTable.cswValid,
-				nwlValid: wordTable.nwlValid,
-				playability: wordTable.playability,
-				alphagramID: wordTable.alphagramID,
+				w: wordTable.word,
+				a: alphagramTable.alphagram,
+				d: wordTable.definition,
+				cv: wordTable.cswValid,
+				nv: wordTable.nwlValid,
+				p: wordTable.playability,
 			})
 			.from(wordTable)
-			.innerJoin(
-				alphagramSubquery,
-				eq(wordTable.alphagramID, alphagramSubquery.id),
-			);
+			.innerJoin(alphagramTable, eq(alphagramTable.id, wordTable.alphagramID))
+			.where(eq(alphagramTable.wordGroupID, wordGroupID))
+			.orderBy(wordTable.word);
 
 		queries.push(Promise.all([wordGroups, alphagrams, words]));
 	}
